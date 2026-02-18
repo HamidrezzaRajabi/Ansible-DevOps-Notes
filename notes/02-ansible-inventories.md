@@ -1,8 +1,6 @@
 
 # 📋 Ansible Inventories
 
-**Date Learned:** [Date]
-**Related Videos:** 010-Ansible Inventories
 
 ## 📌 Key Concepts
 
