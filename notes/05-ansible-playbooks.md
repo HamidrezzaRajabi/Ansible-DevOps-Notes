@@ -486,6 +486,9 @@ ansible-playbook motd_playbook.yaml -v
 ansible-playbook motd_playbook.yaml -vvv
 ```
 
+
+<br>
+
 ### ⚠️ Common Pitfalls
 
 #### 1. YAML Syntax Errors
@@ -541,6 +544,9 @@ handlers:
 ```
 
 
+<br>
+
+
 ## 📚 Playbook Keywords Reference
 
 Essential keywords from  [Ansible Playbook Keywords](https://docs.ansible.com/projects/ansible/latest/reference_appendices/playbooks_keywords.html)
@@ -559,4 +565,5 @@ Essential keywords from  [Ansible Playbook Keywords](https://docs.ansible.com/pr
 | `ignore_errors`| Task       | Continue execution on error     |
 | `changed_when`| Task        | Custom change condition         |
 | `failed_when` | Task        | Custom failure condition        |
+
 
