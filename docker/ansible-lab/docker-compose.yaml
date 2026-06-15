@@ -1,0 +1,151 @@
+# ═══════════════════════════════════════════════════════════════
+#  Ansible Practice Lab – docker-compose.yaml
+#
+#  Topology
+#  ┌─────────────┐     SSH      ┌──────────┐  ┌──────────┐
+#  │  ubuntu-c   │ ────────────►│ ubuntu1  │  │ ubuntu2  │
+#  │  (control)  │ ────────────►├──────────┤  └──────────┘
+#  └─────────────┘     SSH      │  rocky1  │  ┌──────────┐
+#         │                     └──────────┘  │  rocky2  │
+#         │           SSH                     └──────────┘
+#         └──────────────────────────────────►    ...
+#
+#  Key design decisions
+#  • All SSH ports are unique and configurable via .env
+#  • Config files (guest_name, guest_passwd, …) are mounted
+#    read-only into every container from ./config/
+#  • Persistent volumes for each node's home + shared folder
+#  • Key distribution: control node writes its pubkey to the
+#    shared volume; targets poll and inject it automatically
+#  • Optional DinD service for testing Docker Ansible modules
+# ═══════════════════════════════════════════════════════════════
+
+x-target-common: &target-common
+  restart: unless-stopped
+  networks:
+    - ansible-lab
+  volumes:
+    - ./config:/etc/lab-config:ro          # guest/root config files
+    - shared:/shared                        # shared folder + key exchange
+  depends_on:
+    ubuntu-c:
+      condition: service_started
+
+# ── Ubuntu target template ─────────────────────────────────────
+x-ubuntu-target: &ubuntu-target
+  <<: *target-common
+  build:
+    context: ./images/ubuntu-target
+    dockerfile: Dockerfile
+
+# ── Rocky target template ──────────────────────────────────────
+x-rocky-target: &rocky-target
+  <<: *target-common
+  build:
+    context: ./images/rocky-target
+    dockerfile: Dockerfile
+
+# ══════════════════════════════════════════════════════════════
+services:
+
+  # ── Ansible Control Node ─────────────────────────────────────
+  ubuntu-c:
+    build:
+      context: ./images/control
+      dockerfile: Dockerfile
+    container_name: ansible
+    hostname: ansible
+    restart: unless-stopped
+    networks:
+      - ansible-lab
+    volumes:
+      - ./config:/etc/lab-config:ro
+      - ./ansible_home/ubuntu-c/ansible:/home/ansible
+      - ./ansible_home/ubuntu-c/root:/root
+      - shared:/shared
+    ports:
+      - "${CONTROL_SSH_PORT:-2200}:22"
+    environment:
+      # After keygen, publish pubkey to shared volume for targets
+      - PUBLISH_PUBKEY=true
+    # Override CMD to also publish the pubkey then sleep
+    command: >
+      bash -c "
+        sleep 3 &&
+        if [ -f /home/ansible/.ssh/id_rsa.pub ]; then
+          cp /home/ansible/.ssh/id_rsa.pub /shared/.ansible_pubkey
+          echo '✔  Public key published to shared volume.'
+        fi &&
+        sleep infinity
+      "
+
+  # ── Ubuntu Target 1 ──────────────────────────────────────────
+  ubuntu1:
+    <<: *ubuntu-target
+    container_name: ubuntu1
+    hostname: ubuntu1
+    volumes:
+      - ./config:/etc/lab-config:ro
+      - ./ansible_home/ubuntu1/ansible:/home/ansible
+      - ./ansible_home/ubuntu1/root:/root
+      - shared:/shared
+    ports:
+      - "${UBUNTU1_SSH_PORT:-2201}:22"
+
+  # ── Ubuntu Target 2 ──────────────────────────────────────────
+  ubuntu2:
+    <<: *ubuntu-target
+    container_name: ubuntu2
+    hostname: ubuntu2
+    volumes:
+      - ./config:/etc/lab-config:ro
+      - ./ansible_home/ubuntu2/ansible:/home/ansible
+      - ./ansible_home/ubuntu2/root:/root
+      - shared:/shared
+    ports:
+      - "${UBUNTU2_SSH_PORT:-2202}:22"
+
+  # ── Rocky/Alma Target 1 ──────────────────────────────────────
+  rocky1:
+    <<: *rocky-target
+    container_name: rocky1
+    hostname: rocky1
+    volumes:
+      - ./config:/etc/lab-config:ro
+      - ./ansible_home/rocky1/ansible:/home/ansible
+      - ./ansible_home/rocky1/root:/root
+      - shared:/shared
+    ports:
+      - "${ROCKY1_SSH_PORT:-2203}:22"
+
+  # ── Rocky/Alma Target 2 ──────────────────────────────────────
+  rocky2:
+    <<: *rocky-target
+    container_name: rocky2
+    hostname: rocky2
+    volumes:
+      - ./config:/etc/lab-config:ro
+      - ./ansible_home/rocky2/ansible:/home/ansible
+      - ./ansible_home/rocky2/root:/root
+      - shared:/shared
+    ports:
+      - "${ROCKY2_SSH_PORT:-2204}:22"
+
+# ══════════════════════════════════════════════════════════════
+networks:
+  ansible-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${LAB_SUBNET:-172.20.0.0/24}
+
+# ══════════════════════════════════════════════════════════════
+volumes:
+  shared:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/ansible_home/shared
+  # Node-level volumes are bind-mounted inline above (./ansible_home/…)
+  # dind-data:   # uncomment with the DinD service
