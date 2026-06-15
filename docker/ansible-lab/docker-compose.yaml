@@ -53,8 +53,8 @@ services:
     build:
       context: ./images/control
       dockerfile: Dockerfile
-    container_name: ansible
-    hostname: ansible
+    container_name: ubuntu-c
+    hostname: ubuntu-c
     restart: unless-stopped
     networks:
       - ansible-lab
